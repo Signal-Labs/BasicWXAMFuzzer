@@ -1,4 +1,4 @@
-// WxamFuzzer.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// wxamFuzzer.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
 #include <iostream>
@@ -11,12 +11,17 @@ HMODULE hDll_voip;
 // Wxam -> JPEG: flag = 0
 // Wxam -> Gif: flag = ?
 typedef bool (__cdecl* _isWxGF)(
-	char* fileBuffer,
+	unsigned char* fileBuffer,
 	DWORD flag
 );
 
+struct InputStruct {
+	unsigned char* inputBuf;
+	uint32_t inputBuf_sz;
+};
+
 typedef bool(__fastcall* _wxam_decoder_helper_DecodeWxamToJpeg)(
-	char* fileBuffer,
+	InputStruct* fileBuffer,
 	int* pOut
 );
 
@@ -113,6 +118,7 @@ void test_load_buffer() {
 }
 */
 
+
 #pragma optimize( "", off )
 extern "C"
 __declspec(dllexport)
@@ -122,20 +128,26 @@ bool fuzz() {
 	sample_size = *(uint32_t*)(shm_data);
 	if (sample_size > MAX_SAMPLE_SIZE) sample_size = MAX_SAMPLE_SIZE-4;
 	// Update the bytes of our buffer
-	// We can probably avoid the memcpy and just provide the shm_data + sizeof(uint32_t) pointer
-	// directly to the functions below
 	memcpy(sample_bytes, shm_data + sizeof(uint32_t), sample_size);
+	// Input struct is actually: 
+	// 0: pointer to input buffer
+	// 1: input buffer size
+	// so, lets create that:
+	InputStruct inputStruct;
+	inputStruct.inputBuf = sample_bytes;
+	inputStruct.inputBuf_sz = sample_size;
+
 
 	
 	// Call first function as per wxam 
-	bool res = isWxGF((char*)sample_bytes, 4);
+	bool res = isWxGF(inputStruct.inputBuf, sample_size);
 	// 1 = error, 0 = success
 	if (res) {
 		//printf("isWxGF failed\n");
 		return false;
 	}
 	int pOut = 0;
-	res = wxam_decoder_helper_DecodeWxamToJpeg((char*)sample_bytes, &pOut);
+	res = wxam_decoder_helper_DecodeWxamToJpeg(&inputStruct, &pOut);
 	// 1 = success, 0 = error
 	return res;
 
